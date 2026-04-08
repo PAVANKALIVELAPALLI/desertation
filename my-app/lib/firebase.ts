@@ -1,6 +1,3 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-
 const firebaseConfig = {
   apiKey: "AIzaSyByI6rbv7U4Z3Te4FWrC4XXpMPaePqHkuM",
   authDomain: "desertation-ccace.firebaseapp.com",
@@ -11,7 +8,21 @@ const firebaseConfig = {
   measurementId: "G-Y2JDWGZSW8",
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
+export { firebaseConfig };
 
-export { app, auth };
+export async function getFirebaseApp() {
+  const { initializeApp, getApps, getApp } = await import("firebase/app");
+  return getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+}
+
+export async function getFirebaseAuth() {
+  const app = await getFirebaseApp();
+  const { getAuth } = await import("firebase/auth");
+  return getAuth(app);
+}
+
+export async function getFirestore() {
+  const app = await getFirebaseApp();
+  const { getFirestore: _getFirestore } = await import("firebase/firestore");
+  return _getFirestore(app);
+}

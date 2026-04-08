@@ -3,11 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,10 +18,14 @@ export default function LoginPage() {
     setMsg("");
     setBusy(true);
     try {
+      const auth = await getFirebaseAuth();
+      const { signInWithEmailAndPassword, createUserWithEmailAndPassword } =
+        await import("firebase/auth");
+
       if (mode === "in") {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, email.trim(), password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
       }
       router.push("/dashboard");
     } catch (err: unknown) {

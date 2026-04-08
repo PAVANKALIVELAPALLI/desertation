@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -12,18 +11,28 @@ export default function DashboardPage() {
   const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      setChecking(false);
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-      setEmail(user.email);
+    let unsub: (() => void) | undefined;
+
+    getFirebaseAuth().then(async (auth) => {
+      const { onAuthStateChanged } = await import("firebase/auth");
+      unsub = onAuthStateChanged(auth, (user) => {
+        setChecking(false);
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
+        setEmail(user.email);
+      });
     });
-    return () => unsub();
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, [router]);
 
   async function logout() {
+    const auth = await getFirebaseAuth();
+    const { signOut } = await import("firebase/auth");
     await signOut(auth);
     router.push("/login");
   }
