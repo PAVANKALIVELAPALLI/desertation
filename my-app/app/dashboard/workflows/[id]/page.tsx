@@ -16,7 +16,7 @@ import { ExecutionPill } from "@/components/StatusPills";
 import type { Execution, Workflow } from "@/types/workflow";
 
 function fmt(ts: number | null | undefined) {
-  if (!ts) return "—";
+  if (!ts) return "-";
   return new Date(ts).toLocaleString();
 }
 
@@ -30,9 +30,10 @@ export default function WorkflowDetailPage() {
   const [recent, setRecent] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [notice, setNotice] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   async function load() {
@@ -116,7 +117,8 @@ export default function WorkflowDetailPage() {
             {workflow.name}
           </h1>
           <p className="mt-1 text-xs text-zinc-500">
-            Created {fmt(workflow.createdAt)} · Updated {fmt(workflow.updatedAt)}
+            Created {fmt(workflow.createdAt)} · Updated{" "}
+            {fmt(workflow.updatedAt)}
           </p>
         </div>
         <button

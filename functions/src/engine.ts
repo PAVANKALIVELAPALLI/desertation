@@ -23,10 +23,14 @@ async function writeLog(log: Omit<ExecutionLog, "id">): Promise<void> {
 
 async function runStepWithRetries(
   step: WorkflowStep,
-  context: Record<string, unknown>
+  context: Record<string, unknown>,
 ): Promise<StepResult> {
   const maxRetries = Math.max(0, Math.min(5, step.retries ?? 0));
-  let lastResult: StepResult = { success: false, output: {}, error: "not executed" };
+  let lastResult: StepResult = {
+    success: false,
+    output: {},
+    error: "not executed",
+  };
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -49,7 +53,7 @@ async function runStepWithRetries(
 
 export async function runWorkflow(
   workflow: Workflow,
-  triggeredBy: TriggerType
+  triggeredBy: TriggerType,
 ): Promise<void> {
   const ordered = orderedSteps(workflow);
 
@@ -84,7 +88,7 @@ export async function runWorkflow(
         stepId: step.id,
         stepName: step.name,
         level: "warn",
-        message: `step "${step.name}" already visited — skipping to prevent loop`,
+        message: `step "${step.name}" already visited - skipping to prevent loop`,
         input: null,
         output: null,
         error: null,

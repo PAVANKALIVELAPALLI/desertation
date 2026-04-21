@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getUserExecutions } from "@/lib/firestore";
+import { useExecutions } from "@/lib/dashboard-cache";
 import { ExecutionPill } from "@/components/StatusPills";
 import type { Execution } from "@/types/workflow";
 
 function fmt(ts: number | null) {
-  if (!ts) return "—";
+  if (!ts) return "-";
   return new Date(ts).toLocaleString();
 }
 
 function duration(e: Execution): string {
-  if (!e.completedAt) return "—";
+  if (!e.completedAt) return "-";
   const ms = e.completedAt - e.startedAt;
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -25,27 +25,13 @@ export default function ExecutionsPage() {
   const search = useSearchParams();
   const workflowFilter = search.get("workflow");
 
-  const [executions, setExecutions] = useState<Execution[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: executions, loading } = useExecutions(user?.uid, 200);
   const [status, setStatus] = useState<"all" | Execution["status"]>("all");
-
-  useEffect(() => {
-    if (!user) return;
-    let alive = true;
-    setLoading(true);
-    getUserExecutions(user.uid, 200)
-      .then((data) => {
-        if (alive) setExecutions(data);
-      })
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [user]);
 
   const visible = useMemo(() => {
     let list = executions;
-    if (workflowFilter) list = list.filter((e) => e.workflowId === workflowFilter);
+    if (workflowFilter)
+      list = list.filter((e) => e.workflowId === workflowFilter);
     if (status !== "all") list = list.filter((e) => e.status === status);
     return list;
   }, [executions, workflowFilter, status]);

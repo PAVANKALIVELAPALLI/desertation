@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getUserExecutions, getUserWorkflows } from "@/lib/firestore";
-import type { Execution, Workflow } from "@/types/workflow";
+import { useExecutions, useWorkflows } from "@/lib/dashboard-cache";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -23,29 +22,10 @@ function niceDay(key: string): string {
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [executions, setExecutions] = useState<Execution[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: workflows, loading: loadingW } = useWorkflows(user?.uid);
+  const { data: executions, loading: loadingE } = useExecutions(user?.uid, 500);
+  const loading = loadingW || loadingE;
   const [days, setDays] = useState<7 | 14 | 30>(7);
-
-  useEffect(() => {
-    if (!user) return;
-    let alive = true;
-    setLoading(true);
-    Promise.all([
-      getUserWorkflows(user.uid),
-      getUserExecutions(user.uid, 500),
-    ])
-      .then(([wf, ex]) => {
-        if (!alive) return;
-        setWorkflows(wf);
-        setExecutions(ex);
-      })
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [user]);
 
   const inWindow = useMemo(() => {
     const cutoff = Date.now() - days * MS_PER_DAY;

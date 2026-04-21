@@ -7,7 +7,7 @@ import { runWorkflow } from "./engine";
 admin.initializeApp();
 const db = admin.firestore();
 
-export const executeWorkflow = onCall(async (request) => {
+export const executeWorkflow = onCall({ cors: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "you need to be logged in");
   }

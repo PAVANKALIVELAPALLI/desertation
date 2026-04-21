@@ -9,7 +9,7 @@ import { ExecutionPill } from "@/components/StatusPills";
 import type { Execution, ExecutionLog } from "@/types/workflow";
 
 function fmt(ts: number | null) {
-  if (!ts) return "—";
+  if (!ts) return "-";
   return new Date(ts).toLocaleString();
 }
 
@@ -139,7 +139,9 @@ export default function ExecutionDetailPage() {
                   {log.message}
                 </p>
                 {log.error ? (
-                  <p className="mt-1 text-xs text-red-600">error: {log.error}</p>
+                  <p className="mt-1 text-xs text-red-600">
+                    error: {log.error}
+                  </p>
                 ) : null}
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs text-zinc-500 hover:underline">
@@ -198,7 +200,7 @@ function Pre({
         {label}
       </div>
       <pre className="mt-1 overflow-auto rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-        {data ? JSON.stringify(data, null, 2) : "—"}
+        {data ? JSON.stringify(data, null, 2) : "-"}
       </pre>
     </div>
   );

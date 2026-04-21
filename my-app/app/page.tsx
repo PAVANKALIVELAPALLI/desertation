@@ -53,8 +53,8 @@ export default function Home() {
             Automate recurring work with a few clicks, not a deployment.
           </h1>
           <p className="max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
-            Build workflows out of reusable steps — notifications, record
-            updates, conditions, delays, HTTP calls — then run them on demand or
+            Build workflows out of reusable steps - notifications, record
+            updates, conditions, delays, HTTP calls - then run them on demand or
             on a schedule. All runs are logged and measurable.
           </p>
           <div className="flex flex-wrap gap-3">

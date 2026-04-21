@@ -28,7 +28,7 @@ export const SAMPLE_WORKFLOWS: Template[] = [
         order: 1,
         priority: 0,
         retries: 0,
-        config: { message: "Welcome to the platform — glad to have you!" },
+        config: { message: "Welcome to the platform - glad to have you!" },
       },
     ],
   },
@@ -111,7 +111,9 @@ export const SAMPLE_WORKFLOWS: Template[] = [
         order: 2,
         priority: 0,
         retries: 0,
-        config: { message: "Health endpoint did NOT respond OK — investigate." },
+        config: {
+          message: "Health endpoint did NOT respond OK - investigate.",
+        },
       },
       {
         id: "w3_s4",
@@ -175,7 +177,7 @@ export const SAMPLE_WORKFLOWS: Template[] = [
         order: 0,
         priority: 0,
         retries: 0,
-        config: { message: "Hey! Thanks for joining — here is step one." },
+        config: { message: "Hey! Thanks for joining - here is step one." },
       },
       {
         id: "w5_s2",
@@ -247,7 +249,7 @@ export const SAMPLE_WORKFLOWS: Template[] = [
         order: 2,
         priority: 0,
         retries: 0,
-        config: { message: "High-value lead — escalate to sales manager" },
+        config: { message: "High-value lead - escalate to sales manager" },
       },
       {
         id: "w6_s4",
@@ -264,7 +266,7 @@ export const SAMPLE_WORKFLOWS: Template[] = [
 
 export function materializeSample(
   template: Template,
-  userId: string
+  userId: string,
 ): Omit<Workflow, "id"> {
   const now = Date.now();
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -283,10 +285,11 @@ export function materializeSample(
 
 function remapStepRefs(
   config: Template["steps"][number]["config"],
-  suffix: string
+  suffix: string,
 ): Template["steps"][number]["config"] {
   const next = { ...config };
   if (next.onTrueStepId) next.onTrueStepId = `${next.onTrueStepId}_${suffix}`;
-  if (next.onFalseStepId) next.onFalseStepId = `${next.onFalseStepId}_${suffix}`;
+  if (next.onFalseStepId)
+    next.onFalseStepId = `${next.onFalseStepId}_${suffix}`;
   return next;
 }

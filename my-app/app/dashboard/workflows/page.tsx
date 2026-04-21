@@ -20,7 +20,7 @@ import { StatusPill } from "@/components/StatusPills";
 import type { Workflow } from "@/types/workflow";
 
 function fmt(ts: number | null | undefined): string {
-  if (!ts) return "—";
+  if (!ts) return "-";
   return new Date(ts).toLocaleString();
 }
 
@@ -29,18 +29,21 @@ export default function WorkflowsPage() {
   const { data: workflows, loading } = useWorkflows(user?.uid);
 
   const [filter, setFilter] = useState<"all" | "active" | "inactive" | "draft">(
-    "all"
+    "all",
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
-  const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [notice, setNotice] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
 
   const visible = useMemo(
     () =>
-      filter === "all" ? workflows : workflows.filter((w) => w.status === filter),
-    [workflows, filter]
+      filter === "all"
+        ? workflows
+        : workflows.filter((w) => w.status === filter),
+    [workflows, filter],
   );
 
   async function onRun(id: string, name: string) {
@@ -73,7 +76,7 @@ export default function WorkflowsPage() {
     if (!user) return;
     if (
       !confirm(
-        `Load ${SAMPLE_WORKFLOWS.length} sample workflows into your account?`
+        `Load ${SAMPLE_WORKFLOWS.length} sample workflows into your account?`,
       )
     )
       return;
@@ -194,7 +197,10 @@ export default function WorkflowsPage() {
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {visible.map((w) => (
-                <tr key={w.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                <tr
+                  key={w.id}
+                  className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
+                >
                   <td className="px-4 py-3">
                     <Link
                       href={`/dashboard/workflows/${w.id}`}
@@ -203,7 +209,9 @@ export default function WorkflowsPage() {
                       {w.name}
                     </Link>
                     {w.description ? (
-                      <div className="text-xs text-zinc-500">{w.description}</div>
+                      <div className="text-xs text-zinc-500">
+                        {w.description}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300">

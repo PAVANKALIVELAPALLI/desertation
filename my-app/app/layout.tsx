@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Workflow Automation",
-  description: "Dissertation project — workflow automation platform",
+  description: "Dissertation project - workflow automation platform",
 };
 
 export default function RootLayout({

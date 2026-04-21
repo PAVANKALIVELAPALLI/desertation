@@ -9,7 +9,7 @@ import { ExecutionPill, StatusPill } from "@/components/StatusPills";
 type StatusCount = { completed: number; running: number; failed: number };
 
 function formatWhen(ts: number | null | undefined): string {
-  if (!ts) return "—";
+  if (!ts) return "-";
   return new Date(ts).toLocaleString();
 }
 
@@ -29,7 +29,7 @@ export default function DashboardOverview() {
         else if (e.status === "failed") acc.failed++;
         return acc;
       },
-      { completed: 0, running: 0, failed: 0 }
+      { completed: 0, running: 0, failed: 0 },
     );
     return { total, active, ...counts };
   }, [workflows, executions]);
@@ -52,7 +52,11 @@ export default function DashboardOverview() {
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Workflows" value={stats.total} hint={`${stats.active} active`} />
+        <StatCard
+          label="Workflows"
+          value={stats.total}
+          hint={`${stats.active} active`}
+        />
         <StatCard label="Runs (recent)" value={executions.length} />
         <StatCard label="Completed" value={stats.completed} tone="good" />
         <StatCard label="Failed" value={stats.failed} tone="bad" />
