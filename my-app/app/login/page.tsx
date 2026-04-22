@@ -1,32 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getFirebaseAuth } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, loading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"in" | "up">("in");
 
+  useEffect(() => {
+    if (!loading && user) router.replace("/dashboard");
+  }, [user, loading, router]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg("");
     setBusy(true);
     try {
-      const auth = await getFirebaseAuth();
-      const { signInWithEmailAndPassword, createUserWithEmailAndPassword } =
-        await import("firebase/auth");
-
-      if (mode === "in") {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
-      }
+      if (mode === "in") await signIn(email, password);
+      else await signUp(email, password);
       router.push("/dashboard");
     } catch (err: unknown) {
       const code =
@@ -39,6 +37,8 @@ export default function LoginPage() {
         setMsg("that email is already taken");
       } else if (code === "auth/weak-password") {
         setMsg("password should be at least 6 characters");
+      } else if (code === "auth/invalid-email") {
+        setMsg("that email does not look valid");
       } else {
         setMsg("something went wrong, try again");
       }
@@ -54,7 +54,7 @@ export default function LoginPage() {
           {mode === "in" ? "Log in" : "Sign up"}
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          desertation project thing
+          workflow automation platform
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -107,7 +107,9 @@ export default function LoginPage() {
           }}
           className="mt-4 w-full text-center text-sm text-zinc-600 underline dark:text-zinc-400"
         >
-          {mode === "in" ? "need an account? sign up" : "already have account? log in"}
+          {mode === "in"
+            ? "need an account? sign up"
+            : "already have account? log in"}
         </button>
 
         <Link

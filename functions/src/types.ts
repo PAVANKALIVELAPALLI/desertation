@@ -15,7 +15,10 @@ export type StepType =
   | "update_record"
   | "log_event"
   | "condition"
-  | "delay";
+  | "delay"
+  | "http_request";
+
+export type ConditionOp = "==" | "!=" | ">" | "<" | ">=" | "<=";
 
 export interface StepConfig {
   message?: string;
@@ -23,9 +26,14 @@ export interface StepConfig {
   field?: string;
   value?: string;
   conditionField?: string;
-  conditionOp?: "==" | "!=" | ">" | "<";
+  conditionOp?: ConditionOp;
   conditionValue?: string;
+  onTrueStepId?: string;
+  onFalseStepId?: string;
   delaySeconds?: number;
+  url?: string;
+  method?: "GET" | "POST";
+  body?: string;
 }
 
 export interface WorkflowStep {
@@ -34,6 +42,9 @@ export interface WorkflowStep {
   type: StepType;
   config: StepConfig;
   order: number;
+  priority?: number;
+  retries?: number;
+  continueOnError?: boolean;
 }
 
 export interface Workflow {
@@ -46,6 +57,8 @@ export interface Workflow {
   steps: WorkflowStep[];
   createdAt: number;
   updatedAt: number;
+  lastRunAt?: number | null;
+  runCount?: number;
 }
 
 export type ExecutionStatus = "running" | "completed" | "failed";

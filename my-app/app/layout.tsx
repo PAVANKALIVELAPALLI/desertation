@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AnalyticsInit } from "@/components/AnalyticsInit";
+import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "desertation",
-  description: "student project",
+  title: "Workflow Automation",
+  description: "Dissertation project — workflow automation platform",
 };
 
 export default function RootLayout({
@@ -29,8 +30,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AnalyticsInit />
-        {children}
+        <AuthProvider>
+          <AnalyticsInit />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

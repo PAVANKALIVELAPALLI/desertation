@@ -15,7 +15,10 @@ export type StepType =
   | "update_record"
   | "log_event"
   | "condition"
-  | "delay";
+  | "delay"
+  | "http_request";
+
+export type ConditionOp = "==" | "!=" | ">" | "<" | ">=" | "<=";
 
 export interface StepConfig {
   message?: string;
@@ -23,9 +26,14 @@ export interface StepConfig {
   field?: string;
   value?: string;
   conditionField?: string;
-  conditionOp?: "==" | "!=" | ">" | "<";
+  conditionOp?: ConditionOp;
   conditionValue?: string;
+  onTrueStepId?: string;
+  onFalseStepId?: string;
   delaySeconds?: number;
+  url?: string;
+  method?: "GET" | "POST";
+  body?: string;
 }
 
 export interface WorkflowStep {
@@ -34,18 +42,25 @@ export interface WorkflowStep {
   type: StepType;
   config: StepConfig;
   order: number;
+  priority?: number;
+  retries?: number;
+  continueOnError?: boolean;
 }
+
+export type WorkflowStatus = "active" | "inactive" | "draft";
 
 export interface Workflow {
   id?: string;
   userId: string;
   name: string;
   description: string;
-  status: "active" | "inactive" | "draft";
+  status: WorkflowStatus;
   trigger: WorkflowTrigger;
   steps: WorkflowStep[];
   createdAt: number;
   updatedAt: number;
+  lastRunAt?: number | null;
+  runCount?: number;
 }
 
 export type ExecutionStatus = "running" | "completed" | "failed";
@@ -80,3 +95,45 @@ export interface ExecutionLog {
   timestamp: number;
   durationMs: number | null;
 }
+
+export const STEP_TYPE_META: Record<StepType, { label: string; description: string }> = {
+  send_notification: {
+    label: "Send notification",
+    description: "Emit a notification message into the execution log.",
+  },
+  update_record: {
+    label: "Update record",
+    description: "Write a field/value pair into a Firestore collection.",
+  },
+  log_event: {
+    label: "Log event",
+    description: "Append a custom log line to this execution.",
+  },
+  condition: {
+    label: "Condition (if/then)",
+    description: "Branch execution based on context values.",
+  },
+  delay: {
+    label: "Delay",
+    description: "Pause execution for N seconds (capped).",
+  },
+  http_request: {
+    label: "HTTP request",
+    description: "Call an external HTTP endpoint.",
+  },
+};
+
+export const TRIGGER_TYPE_META: Record<TriggerType, { label: string; description: string }> = {
+  manual: {
+    label: "Manual",
+    description: "Run the workflow on demand from the dashboard.",
+  },
+  schedule: {
+    label: "Schedule (CRON)",
+    description: "Fire on a recurring cron expression.",
+  },
+  form_submit: {
+    label: "Form submit",
+    description: "Start when a given form document is created.",
+  },
+};
