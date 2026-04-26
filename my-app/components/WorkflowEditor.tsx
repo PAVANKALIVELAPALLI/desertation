@@ -13,6 +13,7 @@ import {
 } from "@/types/workflow";
 import {
   blankStep,
+  defaultStepConfig,
   validateCron,
   validateWorkflow,
 } from "@/lib/workflow-schema";
@@ -36,8 +37,15 @@ export function WorkflowEditor({
   const [notice, setNotice] = useState<string | null>(null);
 
   const stepIdOptions = useMemo(
-    () => draft.steps.map((s) => ({ id: s.id, name: s.name })),
-    [draft.steps]
+    () =>
+      draft.steps.map((s, index) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        order: s.order,
+        index,
+      })),
+    [draft.steps],
   );
 
   function patch(update: Partial<Draft>) {
@@ -70,11 +78,28 @@ export function WorkflowEditor({
     }));
   }
 
+  function clearStepRefs(step: WorkflowStep, id: string): WorkflowStep {
+    if (step.type !== "condition") return step;
+    return {
+      ...step,
+      config: {
+        ...step.config,
+        onTrueStepId:
+          step.config.onTrueStepId === id ? undefined : step.config.onTrueStepId,
+        onFalseStepId:
+          step.config.onFalseStepId === id
+            ? undefined
+            : step.config.onFalseStepId,
+      },
+    };
+  }
+
   function removeStep(id: string) {
     setDraft((d) => ({
       ...d,
       steps: d.steps
         .filter((s) => s.id !== id)
+        .map((s) => clearStepRefs(s, id))
         .map((s, i) => ({ ...s, order: i })),
     }));
   }
@@ -114,9 +139,14 @@ export function WorkflowEditor({
   async function handleDelete() {
     if (!onDelete) return;
     if (!confirm(`Delete workflow "${draft.name}"?`)) return;
+    setErrors([]);
+    setNotice(null);
     setBusy(true);
     try {
       await onDelete();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "delete failed";
+      setErrors([msg]);
     } finally {
       setBusy(false);
     }
@@ -362,7 +392,7 @@ function StepCard({
   step: WorkflowStep;
   index: number;
   total: number;
-  stepOptions: { id: string; name: string }[];
+  stepOptions: StepOption[];
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   onChange: (u: Partial<WorkflowStep>) => void;
@@ -415,9 +445,13 @@ function StepCard({
         <Field label="Type">
           <select
             value={step.type}
-            onChange={(e) =>
-              onChange({ type: e.target.value as StepType, config: {} })
-            }
+            onChange={(e) => {
+              const nextType = e.target.value as StepType;
+              onChange({
+                type: nextType,
+                config: defaultStepConfig(nextType, step.name),
+              });
+            }}
             className={textInput}
           >
             {(Object.keys(STEP_TYPE_META) as StepType[]).map((t) => (
@@ -483,12 +517,63 @@ function StepConfigFields({
   onChangeConfig,
 }: {
   step: WorkflowStep;
-  stepOptions: { id: string; name: string }[];
+  stepOptions: StepOption[];
   onChangeConfig: (u: Partial<WorkflowStep["config"]>) => void;
 }) {
   const c = step.config;
   switch (step.type) {
-    case "send_notification":
+    case "send_notification": {
+      const channel = c.notificationChannel || "app";
+      return (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Channel">
+              <select
+                value={channel}
+                onChange={(e) =>
+                  onChangeConfig({
+                    notificationChannel: e.target.value as "app" | "email",
+                  })
+                }
+                className={textInput}
+              >
+                <option value="app">App log</option>
+                <option value="email">Email</option>
+              </select>
+            </Field>
+            {channel === "email" ? (
+              <Field label="Email to">
+                <input
+                  type="email"
+                  value={c.emailTo || ""}
+                  onChange={(e) => onChangeConfig({ emailTo: e.target.value })}
+                  className={textInput}
+                />
+              </Field>
+            ) : null}
+          </div>
+          {channel === "email" ? (
+            <Field label="Email subject">
+              <input
+                value={c.emailSubject || ""}
+                onChange={(e) =>
+                  onChangeConfig({ emailSubject: e.target.value })
+                }
+                className={textInput}
+              />
+            </Field>
+          ) : null}
+          <Field label={channel === "email" ? "Email body" : "Message"}>
+            <textarea
+              rows={3}
+              value={c.message || ""}
+              onChange={(e) => onChangeConfig({ message: e.target.value })}
+              className={textInput}
+            />
+          </Field>
+        </div>
+      );
+    }
     case "log_event":
       return (
         <Field label="Message">
@@ -649,7 +734,7 @@ function StepSelect({
   onChange,
 }: {
   value?: string;
-  options: { id: string; name: string }[];
+  options: StepOption[];
   onChange: (v: string | undefined) => void;
 }) {
   return (
@@ -661,9 +746,25 @@ function StepSelect({
       <option value="">(next in order)</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>
-          {o.name}
+          {formatStepOption(o)}
         </option>
       ))}
     </select>
   );
+}
+
+type StepOption = {
+  id: string;
+  name: string;
+  type: StepType;
+  order: number;
+  index: number;
+};
+
+function formatStepOption(option: StepOption) {
+  const label = option.name.trim() || "Untitled step";
+  const shortId = option.id.slice(-6);
+  return `Step ${option.index + 1}: ${label} · ${
+    STEP_TYPE_META[option.type].label
+  } · ${shortId}`;
 }

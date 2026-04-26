@@ -14,11 +14,43 @@ function sleep(ms: number): Promise<void> {
 
 async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
   const message = step.config.message || "no message set";
-  console.log(`[notification] ${message}`);
+  const channel =
+    step.config.notificationChannel || (step.config.emailTo ? "email" : "app");
+
+  if (channel === "email") {
+    if (!step.config.emailTo) {
+      return {
+        success: false,
+        output: {},
+        error: "email recipient is required",
+      };
+    }
+    const subject = step.config.emailSubject || step.name;
+    console.log(`[notification:email] ${step.config.emailTo} ${subject}`);
+    return {
+      success: true,
+      output: {
+        channel,
+        to: step.config.emailTo,
+        subject,
+        message,
+        mailto: buildMailto(step.config.emailTo, subject, message),
+        status: "ready",
+        preparedAt: Date.now(),
+      },
+    };
+  }
+
+  console.log(`[notification:app] ${message}`);
   return {
     success: true,
-    output: { message, sentAt: Date.now() },
+    output: { channel, message, sentAt: Date.now() },
   };
+}
+
+function buildMailto(to: string, subject: string, body: string): string {
+  const params = new URLSearchParams({ subject, body });
+  return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
 }
 
 async function runUpdateRecord(step: WorkflowStep): Promise<StepResult> {

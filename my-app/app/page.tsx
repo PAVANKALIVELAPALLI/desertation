@@ -35,7 +35,7 @@ export default function Home() {
               Log in
             </Link>
             <Link
-              href="/login"
+              href="/login?mode=up"
               className="rounded-md bg-zinc-900 px-3 py-1.5 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Get started
@@ -65,7 +65,7 @@ export default function Home() {
               Open the dashboard
             </Link>
             <Link
-              href="/login"
+              href="/login?mode=up"
               className="rounded-md border border-zinc-300 px-5 py-2.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
             >
               Create an account
@@ -89,7 +89,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-zinc-200 py-6 text-center text-xs text-zinc-500 dark:border-zinc-800">
-        Built with Next.js, Firebase Auth, Firestore, and Cloud Functions.
+        Built with Next.js, Firebase Auth, and Firestore.
       </footer>
     </div>
   );

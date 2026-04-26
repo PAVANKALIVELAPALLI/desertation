@@ -11,6 +11,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function canAccessExecution(executionId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/executions/$(executionId))
+        && get(/databases/$(database)/documents/executions/$(executionId)).data.userId == request.auth.uid;
+    }
+
     match /workflows/{workflowId} {
       allow read, delete: if isOwner(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
@@ -20,14 +26,23 @@ service cloud.firestore {
 
     match /executions/{executionId} {
       allow read: if isOwner(resource.data.userId);
-      allow write: if false;
+      allow create: if isOwner(request.resource.data.userId);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.workflowId == resource.data.workflowId;
+      allow delete: if false;
     }
 
     match /executionLogs/{logId} {
-      allow read: if isSignedIn()
-        && exists(/databases/$(database)/documents/executions/$(resource.data.executionId))
-        && get(/databases/$(database)/documents/executions/$(resource.data.executionId)).data.userId == request.auth.uid;
-      allow write: if false;
+      allow read: if canAccessExecution(resource.data.executionId);
+      allow create: if canAccessExecution(request.resource.data.executionId);
+      allow update, delete: if false;
+    }
+
+    match /workflowRecords/{recordId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if false;
     }
   }
 }

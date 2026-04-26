@@ -22,15 +22,25 @@ function niceDay(key: string): string {
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
-  const { data: workflows, loading: loadingW } = useWorkflows(user?.uid);
-  const { data: executions, loading: loadingE } = useExecutions(user?.uid, 500);
+  const {
+    data: workflows,
+    loading: loadingW,
+    error: workflowsError,
+  } = useWorkflows(user?.uid);
+  const {
+    data: executions,
+    loading: loadingE,
+    error: executionsError,
+  } = useExecutions(user?.uid, 500);
   const loading = loadingW || loadingE;
+  const error = workflowsError || executionsError;
   const [days, setDays] = useState<7 | 14 | 30>(7);
+  const [now] = useState(() => Date.now());
 
   const inWindow = useMemo(() => {
-    const cutoff = Date.now() - days * MS_PER_DAY;
+    const cutoff = now - days * MS_PER_DAY;
     return executions.filter((e) => e.startedAt >= cutoff);
-  }, [executions, days]);
+  }, [executions, days, now]);
 
   const totals = useMemo(() => {
     const completed = inWindow.filter((e) => e.status === "completed").length;
@@ -53,7 +63,7 @@ export default function AnalyticsPage() {
   const daily = useMemo(() => {
     const map = new Map<string, { completed: number; failed: number }>();
     for (let i = days - 1; i >= 0; i--) {
-      const k = dayKey(Date.now() - i * MS_PER_DAY);
+      const k = dayKey(now - i * MS_PER_DAY);
       map.set(k, { completed: 0, failed: 0 });
     }
     inWindow.forEach((e) => {
@@ -64,7 +74,7 @@ export default function AnalyticsPage() {
       else if (e.status === "failed") slot.failed++;
     });
     return Array.from(map.entries()).map(([k, v]) => ({ day: k, ...v }));
-  }, [inWindow, days]);
+  }, [inWindow, days, now]);
 
   const topWorkflows = useMemo(() => {
     const counts = new Map<string, { name: string; runs: number; failed: number }>();
@@ -117,7 +127,11 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {error.message}
+        </div>
+      ) : loading ? (
         <p className="text-sm text-zinc-500">loading...</p>
       ) : (
         <>

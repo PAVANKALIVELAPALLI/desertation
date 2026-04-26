@@ -25,7 +25,7 @@ export default function ExecutionsPage() {
   const search = useSearchParams();
   const workflowFilter = search.get("workflow");
 
-  const { data: executions, loading } = useExecutions(user?.uid, 200);
+  const { data: executions, loading, error } = useExecutions(user?.uid, 200);
   const [status, setStatus] = useState<"all" | Execution["status"]>("all");
 
   const visible = useMemo(() => {
@@ -75,7 +75,11 @@ export default function ExecutionsPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        {loading ? (
+        {error ? (
+          <div className="px-6 py-10 text-center text-sm text-red-600">
+            {error.message}
+          </div>
+        ) : loading ? (
           <div className="px-6 py-10 text-center text-sm text-zinc-500">
             loading...
           </div>

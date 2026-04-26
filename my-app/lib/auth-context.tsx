@@ -11,6 +11,7 @@ import {
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   type User,
@@ -22,6 +23,7 @@ type AuthState = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -49,6 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signUp(email, password) {
         await createUserWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
+      },
+      async resetPassword(email) {
+        await sendPasswordResetEmail(getFirebaseAuth(), email.trim());
       },
       async signOut() {
         await firebaseSignOut(getFirebaseAuth());

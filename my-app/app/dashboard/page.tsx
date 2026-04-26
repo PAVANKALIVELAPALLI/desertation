@@ -15,9 +15,18 @@ function formatWhen(ts: number | null | undefined): string {
 
 export default function DashboardOverview() {
   const { user } = useAuth();
-  const { data: workflows, loading: loadingW } = useWorkflows(user?.uid);
-  const { data: executions, loading: loadingE } = useExecutions(user?.uid, 50);
+  const {
+    data: workflows,
+    loading: loadingW,
+    error: workflowsError,
+  } = useWorkflows(user?.uid);
+  const {
+    data: executions,
+    loading: loadingE,
+    error: executionsError,
+  } = useExecutions(user?.uid, 50);
   const loading = loadingW || loadingE;
+  const error = workflowsError || executionsError;
 
   const stats = useMemo(() => {
     const total = workflows.length;
@@ -61,6 +70,12 @@ export default function DashboardOverview() {
         <StatCard label="Completed" value={stats.completed} tone="good" />
         <StatCard label="Failed" value={stats.failed} tone="bad" />
       </section>
+
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {error.message}
+        </div>
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">

@@ -29,26 +29,58 @@ export default function ExecutionDetailPage() {
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !user?.uid) return;
     let alive = true;
-    setLoading(true);
-    Promise.all([getExecution(id), getExecutionLogs(id)])
-      .then(([e, l]) => {
+    async function load() {
+      setLoading(true);
+      setNotFound(false);
+      setLoadError(null);
+      setLogsError(null);
+      try {
+        const nextExecution = await getExecution(id);
         if (!alive) return;
-        if (!e) {
+        if (!nextExecution) {
+          setExecution(null);
+          setLogs([]);
           setNotFound(true);
           return;
         }
-        setExecution(e);
-        setLogs(l);
-      })
-      .finally(() => alive && setLoading(false));
+        setExecution(nextExecution);
+
+        try {
+          const nextLogs = await getExecutionLogs(id);
+          if (!alive) return;
+          setLogs(nextLogs);
+        } catch (err: unknown) {
+          if (!alive) return;
+          setLogs([]);
+          setLogsError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load execution logs.",
+          );
+        }
+      } catch (err: unknown) {
+        if (!alive) return;
+        setExecution(null);
+        setLogs([]);
+        setLoadError(
+          err instanceof Error ? err.message : "Failed to load execution.",
+        );
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+
+    void load();
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, user?.uid]);
 
   if (loading) return <p className="text-sm text-zinc-500">loading...</p>;
 
@@ -56,6 +88,20 @@ export default function ExecutionDetailPage() {
     return (
       <div className="space-y-2">
         <p className="text-sm text-zinc-500">Execution not found.</p>
+        <Link
+          href="/dashboard/executions"
+          className="text-sm underline text-zinc-700 dark:text-zinc-300"
+        >
+          back to list
+        </Link>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-red-600">{loadError}</p>
         <Link
           href="/dashboard/executions"
           className="text-sm underline text-zinc-700 dark:text-zinc-300"
@@ -107,6 +153,12 @@ export default function ExecutionDetailPage() {
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           <span className="font-medium">Error: </span>
           {execution.error}
+        </div>
+      ) : null}
+
+      {logsError ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          {logsError}
         </div>
       ) : null}
 

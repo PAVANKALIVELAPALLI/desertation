@@ -21,7 +21,10 @@ export type StepType =
 export type ConditionOp = "==" | "!=" | ">" | "<" | ">=" | "<=";
 
 export interface StepConfig {
+  notificationChannel?: "app" | "email";
   message?: string;
+  emailTo?: string;
+  emailSubject?: string;
   collection?: string;
   field?: string;
   value?: string;
@@ -99,7 +102,7 @@ export interface ExecutionLog {
 export const STEP_TYPE_META: Record<StepType, { label: string; description: string }> = {
   send_notification: {
     label: "Send notification",
-    description: "Emit a notification message into the execution log.",
+    description: "Create an app notification or email-ready notification.",
   },
   update_record: {
     label: "Update record",

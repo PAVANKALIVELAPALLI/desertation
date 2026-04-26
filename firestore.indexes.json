@@ -21,6 +21,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "workflowId", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "startedAt", "order": "DESCENDING" }
       ]
     },

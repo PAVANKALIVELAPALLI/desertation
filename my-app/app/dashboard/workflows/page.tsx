@@ -26,7 +26,7 @@ function fmt(ts: number | null | undefined): string {
 
 export default function WorkflowsPage() {
   const { user } = useAuth();
-  const { data: workflows, loading } = useWorkflows(user?.uid);
+  const { data: workflows, loading, error } = useWorkflows(user?.uid);
 
   const [filter, setFilter] = useState<"all" | "active" | "inactive" | "draft">(
     "all",
@@ -64,9 +64,15 @@ export default function WorkflowsPage() {
     if (!w.id) return;
     const next = w.status === "active" ? "inactive" : "active";
     setBusyId(w.id);
+    setNotice(null);
     patchWorkflowInCache(w.id, { status: next });
     try {
       await updateWorkflow(w.id, { status: next });
+      setNotice({ kind: "ok", text: "Updated" });
+    } catch (err: unknown) {
+      patchWorkflowInCache(w.id, { status: w.status });
+      const msg = err instanceof Error ? err.message : "update failed";
+      setNotice({ kind: "err", text: msg });
     } finally {
       setBusyId(null);
     }
@@ -97,6 +103,9 @@ export default function WorkflowsPage() {
         text: `Added ${docs.length} sample workflows`,
       });
     } catch (err: unknown) {
+      optimistic.forEach((w) => {
+        if (w.id) removeWorkflowFromCache(w.id);
+      });
       const msg = err instanceof Error ? err.message : "seed failed";
       setNotice({ kind: "err", text: msg });
     } finally {
@@ -105,12 +114,18 @@ export default function WorkflowsPage() {
   }
 
   async function onDelete(id: string, name: string) {
+    const old = workflows.find((w) => w.id === id);
     if (!confirm(`Delete workflow "${name}"? This cannot be undone.`)) return;
     setBusyId(id);
+    setNotice(null);
     removeWorkflowFromCache(id);
     try {
       await deleteWorkflow(id);
       setNotice({ kind: "ok", text: "Deleted" });
+    } catch (err: unknown) {
+      if (old) addWorkflowsToCache([old]);
+      const msg = err instanceof Error ? err.message : "delete failed";
+      setNotice({ kind: "err", text: msg });
     } finally {
       setBusyId(null);
     }
@@ -174,8 +189,18 @@ export default function WorkflowsPage() {
         </div>
       ) : null}
 
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {error.message}
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        {loading && workflows.length === 0 ? (
+        {error ? (
+          <div className="px-6 py-10 text-center text-sm text-zinc-500">
+            Could not load workflows.
+          </div>
+        ) : loading && workflows.length === 0 ? (
           <div className="px-6 py-10 text-center text-sm text-zinc-500">
             loading...
           </div>

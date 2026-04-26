@@ -21,7 +21,10 @@ export type StepType =
 export type ConditionOp = "==" | "!=" | ">" | "<" | ">=" | "<=";
 
 export interface StepConfig {
+  notificationChannel?: "app" | "email";
   message?: string;
+  emailTo?: string;
+  emailSubject?: string;
   collection?: string;
   field?: string;
   value?: string;

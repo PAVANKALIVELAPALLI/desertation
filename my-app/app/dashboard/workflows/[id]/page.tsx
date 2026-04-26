@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -35,29 +35,38 @@ export default function WorkflowDetailPage() {
     text: string;
   } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  async function load() {
-    if (!id) return;
+  const load = useCallback(async () => {
+    if (!id || !user?.uid) return;
     setLoading(true);
+    setNotFound(false);
+    setLoadError(null);
     try {
       const [wf, ex] = await Promise.all([
         getWorkflow(id),
-        getWorkflowExecutions(id, 10),
+        getWorkflowExecutions(id, user.uid, 10),
       ]);
-      if (!wf) {
-        setNotFound(true);
-        return;
-      }
       setWorkflow(wf);
       setRecent(ex);
+      if (!wf) {
+        setRecent([]);
+        setNotFound(true);
+      }
+    } catch (err: unknown) {
+      setWorkflow(null);
+      setRecent([]);
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to load workflow.",
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, [id, user?.uid]);
 
   useEffect(() => {
-    if (id) load();
-  }, [id]);
+    void load();
+  }, [load]);
 
   if (loading) {
     return <p className="text-sm text-zinc-500">loading...</p>;
@@ -67,6 +76,20 @@ export default function WorkflowDetailPage() {
     return (
       <div className="space-y-2">
         <p className="text-sm text-zinc-500">Workflow not found.</p>
+        <Link
+          href="/dashboard/workflows"
+          className="text-sm underline text-zinc-700 dark:text-zinc-300"
+        >
+          back to list
+        </Link>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-red-600">{loadError}</p>
         <Link
           href="/dashboard/workflows"
           className="text-sm underline text-zinc-700 dark:text-zinc-300"
@@ -94,7 +117,9 @@ export default function WorkflowDetailPage() {
     try {
       await runWorkflowNow(workflow.id);
       setNotice({ kind: "ok", text: "Execution started" });
-      setTimeout(load, 1200);
+      setTimeout(() => {
+        void load();
+      }, 1200);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "run failed";
       setNotice({ kind: "err", text: msg });

@@ -1,5 +1,6 @@
 import type {
   StepType,
+  StepConfig,
   TriggerType,
   Workflow,
   WorkflowStep,
@@ -74,7 +75,16 @@ function validateTrigger(t: WorkflowTrigger, errors: string[]): void {
   }
 }
 
-function validateStep(step: WorkflowStep, index: number, errors: string[]): void {
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validateStep(
+  step: WorkflowStep,
+  index: number,
+  stepIds: Set<string>,
+  errors: string[],
+): void {
   const prefix = `step[${index}] "${step.name || step.id || "untitled"}"`;
   if (!step.id) errors.push(`${prefix}: missing id`);
   if (!step.name) errors.push(`${prefix}: missing name`);
@@ -85,6 +95,13 @@ function validateStep(step: WorkflowStep, index: number, errors: string[]): void
   const c = step.config || {};
   switch (step.type) {
     case "send_notification":
+      if (!c.message) errors.push(`${prefix}: message is required`);
+      if (c.notificationChannel === "email") {
+        if (!c.emailTo) errors.push(`${prefix}: emailTo is required`);
+        else if (!isEmail(c.emailTo))
+          errors.push(`${prefix}: emailTo must be a valid email`);
+      }
+      break;
     case "log_event":
       if (!c.message) errors.push(`${prefix}: message is required`);
       break;
@@ -98,6 +115,14 @@ function validateStep(step: WorkflowStep, index: number, errors: string[]): void
       if (!c.conditionOp) errors.push(`${prefix}: conditionOp is required`);
       if (c.conditionValue === undefined || c.conditionValue === "")
         errors.push(`${prefix}: conditionValue is required`);
+      if (c.onTrueStepId && !stepIds.has(c.onTrueStepId))
+        errors.push(`${prefix}: unknown onTrueStepId "${c.onTrueStepId}"`);
+      if (c.onFalseStepId && !stepIds.has(c.onFalseStepId))
+        errors.push(`${prefix}: unknown onFalseStepId "${c.onFalseStepId}"`);
+      if (c.onTrueStepId === step.id)
+        errors.push(`${prefix}: onTrueStepId cannot target itself`);
+      if (c.onFalseStepId === step.id)
+        errors.push(`${prefix}: onFalseStepId cannot target itself`);
       break;
     case "delay": {
       const d = Number(c.delaySeconds);
@@ -124,12 +149,13 @@ export function validateWorkflow(w: Partial<Workflow>): ValidationResult {
     errors.push("at least one step is required");
   } else {
     const seen = new Set<string>();
+    const stepIds = new Set(w.steps.map((s) => s.id).filter(Boolean));
     w.steps.forEach((s, i) => {
       if (s.id) {
         if (seen.has(s.id)) errors.push(`duplicate step id: ${s.id}`);
         seen.add(s.id);
       }
-      validateStep(s, i, errors);
+      validateStep(s, i, stepIds, errors);
     });
   }
 
@@ -140,12 +166,35 @@ export function newStepId(): string {
   return `step_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export function defaultStepConfig(type: StepType, name: string): StepConfig {
+  switch (type) {
+    case "send_notification":
+      return {
+        notificationChannel: "app",
+        message: `${name} notification`,
+        emailSubject: name,
+      };
+    case "update_record":
+      return { collection: "workflowRecords", field: "note", value: name };
+    case "condition":
+      return { conditionField: "ok", conditionOp: "==", conditionValue: "true" };
+    case "delay":
+      return { delaySeconds: 1 };
+    case "http_request":
+      return { method: "GET", url: "" };
+    case "log_event":
+    default:
+      return { message: `${name} ran` };
+  }
+}
+
 export function blankStep(order: number): WorkflowStep {
+  const name = `New step ${order + 1}`;
   return {
     id: newStepId(),
-    name: "New step",
+    name,
     type: "log_event",
-    config: { message: "" },
+    config: defaultStepConfig("log_event", name),
     order,
     priority: 0,
     retries: 0,
