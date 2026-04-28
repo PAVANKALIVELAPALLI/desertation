@@ -1,15 +1,100 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
+import * as nodemailer from "nodemailer";
 import { Workflow } from "./types";
 import { runWorkflow } from "./engine";
 
 admin.initializeApp();
 const db = admin.firestore();
 
+const gmailUser = defineSecret("GMAIL_USER");
+const gmailAppPassword = defineSecret("GMAIL_APP_PASSWORD");
+
+let _mailer: nodemailer.Transporter | null = null;
+function getMailer(): nodemailer.Transporter | null {
+  if (_mailer) return _mailer;
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return null;
+  _mailer = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+  });
+  return _mailer;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export const sendEmail = onCall(
+  {
+    region: "us-central1",
+    secrets: [gmailUser, gmailAppPassword],
+    cors: [
+      /^http:\/\/localhost:\d+$/,
+      "https://desertation-ccace.web.app",
+      "https://desertation-ccace.firebaseapp.com",
+    ],
+    invoker: "public",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "you need to be logged in");
+    }
+    const data = (request.data ?? {}) as {
+      to?: string;
+      subject?: string;
+      body?: string;
+    };
+    const to = (data.to || "").trim();
+    const subject = (data.subject || "Workflow notification").trim();
+    const body = data.body || "";
+    if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      throw new HttpsError("invalid-argument", "valid 'to' email is required");
+    }
+    const mailer = getMailer();
+    if (!mailer) {
+      throw new HttpsError(
+        "failed-precondition",
+        "email is not configured on the server"
+      );
+    }
+    const fromAddress = process.env.GMAIL_USER || "noreply@desertation-ccace.web.app";
+    const fromHeader = `Workflow App <${fromAddress}>`;
+    try {
+      const info = await mailer.sendMail({
+        from: fromHeader,
+        to,
+        subject,
+        text: body,
+        html: `<p>${escapeHtml(body)}</p>`,
+      });
+      return {
+        ok: true,
+        messageId: info.messageId,
+        accepted: info.accepted,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new HttpsError("internal", `email failed: ${message}`);
+    }
+  }
+);
+
 export const executeWorkflow = onCall(
   {
     region: "us-central1",
+    secrets: [gmailUser, gmailAppPassword],
     cors: [
       /^http:\/\/localhost:\d+$/,
       "https://desertation-ccace.web.app",
@@ -47,7 +132,12 @@ export const executeWorkflow = onCall(
   return { ok: true };
 });
 
-export const scheduledRunner = onSchedule("every 1 minutes", async () => {
+export const scheduledRunner = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    secrets: [gmailUser, gmailAppPassword],
+  },
+  async () => {
   const now = new Date();
   const snap = await db
     .collection("workflows")
@@ -70,7 +160,8 @@ export const scheduledRunner = onSchedule("every 1 minutes", async () => {
   }
 
   await Promise.all(tasks);
-});
+  }
+);
 
 function shouldRunNow(cron: string, now: Date): boolean {
   const parts = cron.trim().split(/\s+/);

@@ -334,18 +334,45 @@ async function runStepOnce(
         };
       }
       const subject = config.emailSubject || workflow.name;
-      return {
-        success: true,
-        output: {
-          channel,
-          to: config.emailTo,
-          subject,
-          message,
-          mailto: buildMailto(config.emailTo, subject, message),
-          status: "ready",
-          preparedAt: Date.now(),
-        },
-      };
+      try {
+        const { getFunctions, httpsCallable } = await import("firebase/functions");
+        const { getFirebaseApp } = await import("./firebase");
+        const fns = getFunctions(getFirebaseApp(), "us-central1");
+        const callable = httpsCallable(fns, "sendEmail");
+        const res = await callable({ to: config.emailTo, subject, body: message });
+        const data = (res.data ?? {}) as {
+          ok?: boolean;
+          messageId?: string;
+          accepted?: string[];
+        };
+        return {
+          success: true,
+          output: {
+            channel,
+            to: config.emailTo,
+            subject,
+            message,
+            status: "sent",
+            messageId: data.messageId,
+            accepted: data.accepted,
+            sentAt: Date.now(),
+          },
+        };
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          output: {
+            channel,
+            to: config.emailTo,
+            subject,
+            message,
+            status: "failed",
+            mailto: buildMailto(config.emailTo, subject, message),
+          },
+          error: errMsg,
+        };
+      }
     }
 
     return {

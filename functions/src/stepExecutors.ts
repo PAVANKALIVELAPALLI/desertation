@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import * as nodemailer from "nodemailer";
 import { WorkflowStep } from "./types";
 
 export interface StepResult {
@@ -10,6 +11,21 @@ export interface StepResult {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let _mailer: nodemailer.Transporter | null = null;
+function getMailer(): nodemailer.Transporter | null {
+  if (_mailer) return _mailer;
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return null;
+  _mailer = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+  });
+  return _mailer;
 }
 
 async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
@@ -26,19 +42,62 @@ async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
       };
     }
     const subject = step.config.emailSubject || step.name;
-    console.log(`[notification:email] ${step.config.emailTo} ${subject}`);
-    return {
-      success: true,
-      output: {
-        channel,
-        to: step.config.emailTo,
+    const to = step.config.emailTo;
+    const mailer = getMailer();
+    const fromAddress =
+      process.env.GMAIL_USER || "noreply@desertation-ccace.web.app";
+    const fromHeader = `Workflow App <${fromAddress}>`;
+
+    if (!mailer) {
+      console.warn(
+        "[notification:email] mailer not configured — falling back to mailto"
+      );
+      return {
+        success: true,
+        output: {
+          channel,
+          to,
+          subject,
+          message,
+          mailto: buildMailto(to, subject, message),
+          status: "ready",
+          warning: "GMAIL_USER / GMAIL_APP_PASSWORD secrets not set",
+          preparedAt: Date.now(),
+        },
+      };
+    }
+
+    try {
+      const info = await mailer.sendMail({
+        from: fromHeader,
+        to,
         subject,
-        message,
-        mailto: buildMailto(step.config.emailTo, subject, message),
-        status: "ready",
-        preparedAt: Date.now(),
-      },
-    };
+        text: message,
+        html: `<p>${escapeHtml(message)}</p>`,
+      });
+      console.log(`[notification:email] sent ${info.messageId} to ${to}`);
+      return {
+        success: true,
+        output: {
+          channel,
+          to,
+          subject,
+          message,
+          status: "sent",
+          messageId: info.messageId,
+          accepted: info.accepted,
+          sentAt: Date.now(),
+        },
+      };
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[notification:email] failed: ${errMsg}`);
+      return {
+        success: false,
+        output: { channel, to, subject, message, status: "failed" },
+        error: errMsg,
+      };
+    }
   }
 
   console.log(`[notification:app] ${message}`);
@@ -51,6 +110,15 @@ async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
 function buildMailto(to: string, subject: string, body: string): string {
   const params = new URLSearchParams({ subject, body });
   return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 async function runUpdateRecord(step: WorkflowStep): Promise<StepResult> {

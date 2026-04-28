@@ -2,5 +2,22 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git"]
+    }
+  ],
+  "hosting": {
+    "public": "my-app/out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "trailingSlash": true,
+    "cleanUrls": true,
+    "rewrites": [
+      { "source": "/dashboard/workflows/**", "destination": "/dashboard/workflows/_/index.html" },
+      { "source": "/dashboard/executions/**", "destination": "/dashboard/executions/_/index.html" }
+    ]
   }
 }

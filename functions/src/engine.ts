@@ -2,7 +2,9 @@ import * as admin from "firebase-admin";
 import { Workflow, TriggerType, ExecutionLog, WorkflowStep } from "./types";
 import { executeStep, StepResult } from "./stepExecutors";
 
-const db = admin.firestore();
+function db(): FirebaseFirestore.Firestore {
+  return admin.firestore();
+}
 
 function orderedSteps(workflow: Workflow): WorkflowStep[] {
   return [...workflow.steps].sort((a, b) => {
@@ -18,7 +20,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function writeLog(log: Omit<ExecutionLog, "id">): Promise<void> {
-  await db.collection("executionLogs").add(log);
+  await db().collection("executionLogs").add(log);
 }
 
 async function runStepWithRetries(
@@ -57,7 +59,7 @@ export async function runWorkflow(
 ): Promise<void> {
   const ordered = orderedSteps(workflow);
 
-  const executionRef = await db.collection("executions").add({
+  const executionRef = await db().collection("executions").add({
     workflowId: workflow.id,
     workflowName: workflow.name,
     userId: workflow.userId,
@@ -178,7 +180,7 @@ export async function runWorkflow(
 
 async function bumpWorkflowRun(workflowId: string) {
   try {
-    await db
+    await db()
       .collection("workflows")
       .doc(workflowId)
       .update({
