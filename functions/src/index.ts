@@ -138,6 +138,16 @@ export const scheduledRunner = onSchedule(
     secrets: [gmailUser, gmailAppPassword],
   },
   async () => {
+  try {
+    const cfg = await db.doc("system/scheduler").get();
+    if (cfg.exists && cfg.data()?.enabled === false) {
+      console.log("[scheduledRunner] kill-switch is set to false — skipping");
+      return;
+    }
+  } catch (err) {
+    console.warn("[scheduledRunner] kill-switch read error, continuing:", err);
+  }
+
   const now = new Date();
   const snap = await db
     .collection("workflows")
