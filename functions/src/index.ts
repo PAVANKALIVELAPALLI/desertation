@@ -1,9 +1,10 @@
 import * as admin from "firebase-admin";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import * as nodemailer from "nodemailer";
-import { Workflow } from "./types";
+import { Workflow, WorkflowStep } from "./types";
 import { runWorkflow } from "./engine";
 
 admin.initializeApp();
@@ -132,6 +133,124 @@ export const executeWorkflow = onCall(
   return { ok: true };
 });
 
+// Workflow `update_record` step: writes a field/value pair into the user-named
+// collection. Server-side because Firestore rules block writes from the client
+// to arbitrary collection names. Auth-gated, rejects system collections.
+const SYSTEM_COLLECTIONS = new Set([
+  "workflows",
+  "executions",
+  "executionLogs",
+  "users",
+  "system",
+]);
+
+export const writeRecord = onCall(
+  {
+    region: "us-central1",
+    cors: [
+      /^http:\/\/localhost:\d+$/,
+      "https://desertation-ccace.web.app",
+      "https://desertation-ccace.firebaseapp.com",
+    ],
+    invoker: "public",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "you need to be logged in");
+    }
+    const data = (request.data ?? {}) as {
+      collection?: string;
+      field?: string;
+      value?: unknown;
+      workflowId?: string;
+    };
+    const target = (data.collection || "").trim();
+    const field = (data.field || "").trim();
+    if (!target || !field) {
+      throw new HttpsError(
+        "invalid-argument",
+        "collection and field are required"
+      );
+    }
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,62}$/.test(target)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "collection name must start with a letter and contain only letters, numbers, underscores, or dashes (max 63 chars)"
+      );
+    }
+    if (SYSTEM_COLLECTIONS.has(target)) {
+      throw new HttpsError(
+        "permission-denied",
+        `cannot write to reserved system collection "${target}"`
+      );
+    }
+    const ref = db.collection(target).doc();
+    await ref.set({
+      [field]: data.value ?? null,
+      userId: request.auth.uid,
+      updatedByWorkflow: true,
+      workflowId: data.workflowId ?? null,
+      createdAt: Date.now(),
+    });
+    return {
+      ok: true,
+      docId: ref.id,
+      collection: target,
+      field,
+      value: data.value ?? null,
+    };
+  }
+);
+
+// One-shot: pauses all the caller's active scheduled workflows.
+// Optionally keep specific workflow IDs active via `keepIds` param.
+// Returns { paused: [{id, name, cron}], kept: [{id, name}] }.
+export const pauseAllScheduled = onCall(
+  {
+    region: "us-central1",
+    cors: [
+      /^http:\/\/localhost:\d+$/,
+      "https://desertation-ccace.web.app",
+      "https://desertation-ccace.firebaseapp.com",
+    ],
+    invoker: "public",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "you need to be logged in");
+    }
+    const uid = request.auth.uid;
+    const data = (request.data ?? {}) as { keepIds?: string[] };
+    const keep = new Set(data.keepIds ?? []);
+
+    const snap = await db
+      .collection("workflows")
+      .where("userId", "==", uid)
+      .where("status", "==", "active")
+      .where("trigger.type", "==", "schedule")
+      .get();
+
+    const paused: { id: string; name: string; cron: string | null }[] = [];
+    const kept: { id: string; name: string }[] = [];
+    const batch = db.batch();
+    for (const doc of snap.docs) {
+      const wf = doc.data() as Workflow;
+      if (keep.has(doc.id)) {
+        kept.push({ id: doc.id, name: wf.name });
+        continue;
+      }
+      batch.update(doc.ref, { status: "inactive", updatedAt: Date.now() });
+      paused.push({
+        id: doc.id,
+        name: wf.name,
+        cron: wf.trigger?.config?.cron ?? null,
+      });
+    }
+    if (paused.length > 0) await batch.commit();
+    return { paused, kept };
+  }
+);
+
 export const scheduledRunner = onSchedule(
   {
     schedule: "every 1 minutes",
@@ -222,3 +341,118 @@ function matchField(field: string, value: number, lo: number, hi: number): boole
 
   return parseInt(field, 10) === value;
 }
+
+// Debug endpoint: lists every active scheduled workflow.
+// Open in a browser to see id, name, cron, and email step config.
+// Optional ?action=pauseAll&secret=XXX disables all of them.
+export const debugSchedules = onRequest(
+  {
+    region: "us-central1",
+    cors: true,
+  },
+  async (req, res) => {
+    const snap = await db
+      .collection("workflows")
+      .where("status", "==", "active")
+      .where("trigger.type", "==", "schedule")
+      .get();
+
+    const rows = snap.docs.map((d) => {
+      const data = d.data() as Workflow;
+      const steps = (data.steps || []).map((s: WorkflowStep) => ({
+        name: s.name,
+        type: s.type,
+        emailTo: s.config?.emailTo,
+        emailSubject: s.config?.emailSubject,
+        message: s.config?.message,
+        cron: data.trigger?.config?.cron,
+      }));
+      return {
+        id: d.id,
+        name: data.name,
+        userId: data.userId,
+        cron: data.trigger?.config?.cron,
+        steps,
+      };
+    });
+
+    if (req.query.action === "pauseAll" && req.query.secret === "knockknock") {
+      const batch = db.batch();
+      snap.docs.forEach((d) =>
+        batch.update(d.ref, { status: "inactive", updatedAt: Date.now() })
+      );
+      if (snap.size > 0) await batch.commit();
+      res.json({ pausedCount: snap.size, paused: rows });
+      return;
+    }
+
+    if (req.query.action === "pauseId" && typeof req.query.id === "string") {
+      const id = req.query.id;
+      const target = snap.docs.find((d) => d.id === id);
+      if (!target) {
+        res.status(404).json({ error: `workflow ${id} not active+scheduled` });
+        return;
+      }
+      await target.ref.update({ status: "inactive", updatedAt: Date.now() });
+      res.json({ paused: id });
+      return;
+    }
+
+    res.json({ count: snap.size, workflows: rows });
+  }
+);
+
+// Fires every workflow with trigger.type=form_submit and matching formId
+// whenever a doc lands in /formSubmissions.
+// The submission doc must include { formId, userId, ...payload }.
+// Payload fields become available in step context so condition steps can
+// branch on them.
+export const onFormSubmission = onDocumentCreated(
+  {
+    region: "us-central1",
+    document: "formSubmissions/{submissionId}",
+    secrets: [gmailUser, gmailAppPassword],
+  },
+  async (event) => {
+    const submission = event.data?.data();
+    if (!submission) return;
+
+    const formId = submission.formId as string | undefined;
+    const userId = submission.userId as string | undefined;
+    if (!formId || !userId) {
+      console.warn(
+        `[onFormSubmission] missing formId or userId on submission ${event.params.submissionId}`
+      );
+      return;
+    }
+
+    const snap = await db
+      .collection("workflows")
+      .where("userId", "==", userId)
+      .where("status", "==", "active")
+      .where("trigger.type", "==", "form_submit")
+      .where("trigger.config.formId", "==", formId)
+      .get();
+
+    if (snap.empty) {
+      console.log(
+        `[onFormSubmission] no active form_submit workflows for formId="${formId}" user=${userId}`
+      );
+      return;
+    }
+
+    const tasks: Promise<void>[] = [];
+    for (const doc of snap.docs) {
+      const wf = { id: doc.id, ...doc.data() } as Workflow;
+      console.log(
+        `[onFormSubmission] firing workflow ${wf.id} for submission ${event.params.submissionId}`
+      );
+      tasks.push(
+        runWorkflow(wf, "form_submit").catch((err) => {
+          console.error(`[onFormSubmission] failed for ${wf.id}:`, err);
+        })
+      );
+    }
+    await Promise.all(tasks);
+  }
+);

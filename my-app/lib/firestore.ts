@@ -167,9 +167,16 @@ export async function runWorkflowNow(workflowId: string): Promise<void> {
   let firstError: string | null = null;
   let index = 0;
   const seen = new Set<string>();
+  const skippedByBranch = new Set<string>();
 
   while (index < steps.length) {
     const step = steps[index];
+
+    if (skippedByBranch.has(step.id)) {
+      // condition routed away from this step — silently skip
+      index++;
+      continue;
+    }
 
     if (seen.has(step.id)) {
       await writeExecutionLog(db, {
@@ -227,6 +234,15 @@ export async function runWorkflowNow(workflowId: string): Promise<void> {
 
     Object.assign(context, result.output);
     await updateDoc(executionRef, { stepsCompleted: completed });
+
+    // For condition steps, mark the not-taken branch target so it gets
+    // skipped when the engine reaches it later in linear traversal.
+    if (step.type === "condition") {
+      const onTrue = step.config.onTrueStepId;
+      const onFalse = step.config.onFalseStepId;
+      if (onTrue && onTrue !== result.nextStepId) skippedByBranch.add(onTrue);
+      if (onFalse && onFalse !== result.nextStepId) skippedByBranch.add(onFalse);
+    }
 
     if (result.nextStepId) {
       const nextIndex = steps.findIndex((s) => s.id === result.nextStepId);
@@ -322,7 +338,8 @@ async function runStepOnce(
   const config = step.config;
 
   if (step.type === "send_notification") {
-    const message = config.message || "no message set";
+    const rawMessage = config.message || "no message set";
+    const message = resolveTemplate(rawMessage, context);
     const channel = config.notificationChannel || (config.emailTo ? "email" : "app");
 
     if (channel === "email") {
@@ -333,13 +350,17 @@ async function runStepOnce(
           error: "email recipient is required",
         };
       }
-      const subject = config.emailSubject || workflow.name;
+      const to = resolveTemplate(config.emailTo, context);
+      const subject = resolveTemplate(
+        config.emailSubject || workflow.name,
+        context,
+      );
       try {
         const { getFunctions, httpsCallable } = await import("firebase/functions");
         const { getFirebaseApp } = await import("./firebase");
         const fns = getFunctions(getFirebaseApp(), "us-central1");
         const callable = httpsCallable(fns, "sendEmail");
-        const res = await callable({ to: config.emailTo, subject, body: message });
+        const res = await callable({ to, subject, body: message });
         const data = (res.data ?? {}) as {
           ok?: boolean;
           messageId?: string;
@@ -349,7 +370,7 @@ async function runStepOnce(
           success: true,
           output: {
             channel,
-            to: config.emailTo,
+            to,
             subject,
             message,
             status: "sent",
@@ -364,11 +385,11 @@ async function runStepOnce(
           success: false,
           output: {
             channel,
-            to: config.emailTo,
+            to,
             subject,
             message,
             status: "failed",
-            mailto: buildMailto(config.emailTo, subject, message),
+            mailto: buildMailto(to, subject, message),
           },
           error: errMsg,
         };
@@ -382,7 +403,8 @@ async function runStepOnce(
   }
 
   if (step.type === "log_event") {
-    const message = config.message || "event logged";
+    const rawMessage = config.message || "event logged";
+    const message = resolveTemplate(rawMessage, context);
     return { success: true, output: { logged: message, at: Date.now() } };
   }
 
@@ -394,23 +416,45 @@ async function runStepOnce(
         error: "missing collection or field in config",
       };
     }
-    const ref = await addDoc(collection(db, "workflowRecords"), {
-      userId: workflow.userId,
-      workflowId: workflow.id,
-      collectionName: config.collection,
-      field: config.field,
-      value: config.value ?? null,
-      updatedAt: Date.now(),
-    });
-    return {
-      success: true,
-      output: {
-        docId: ref.id,
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const { getFirebaseApp } = await import("./firebase");
+      const fns = getFunctions(getFirebaseApp(), "us-central1");
+      const callable = httpsCallable(fns, "writeRecord");
+      const res = await callable({
         collection: config.collection,
         field: config.field,
         value: config.value ?? null,
-      },
-    };
+        workflowId: workflow.id,
+      });
+      const data = (res.data ?? {}) as {
+        ok?: boolean;
+        docId?: string;
+        collection?: string;
+        field?: string;
+        value?: unknown;
+      };
+      return {
+        success: true,
+        output: {
+          docId: data.docId,
+          collection: data.collection ?? config.collection,
+          field: data.field ?? config.field,
+          value: data.value ?? config.value ?? null,
+        },
+      };
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        output: {
+          collection: config.collection,
+          field: config.field,
+          value: config.value ?? null,
+        },
+        error: errMsg,
+      };
+    }
   }
 
   if (step.type === "condition") {
@@ -465,12 +509,19 @@ async function runStepOnce(
         signal: controller.signal,
       });
       const text = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = null;
+      }
       return {
         success: res.ok,
         output: {
           status: res.status,
           ok: res.ok,
-          body: text.slice(0, 2048),
+          body: parsed ?? text.slice(0, 2048),
+          bodyText: text.slice(0, 2048),
         },
         error: res.ok ? undefined : `HTTP ${res.status}`,
       };
@@ -499,6 +550,31 @@ function compare(op: string, actual: unknown, expected: unknown): boolean {
 function buildMailto(to: string, subject: string, body: string): string {
   const params = new URLSearchParams({ subject, body });
   return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
+}
+
+function resolveTemplate(
+  template: string | undefined,
+  context: Record<string, unknown>,
+): string {
+  if (!template) return "";
+  return template.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (match, path: string) => {
+    const segments = path.split(".");
+    let value: unknown = context;
+    for (const seg of segments) {
+      if (value == null || typeof value !== "object") return match;
+      value = (value as Record<string, unknown>)[seg];
+    }
+    if (value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  });
 }
 
 function sleep(ms: number): Promise<void> {

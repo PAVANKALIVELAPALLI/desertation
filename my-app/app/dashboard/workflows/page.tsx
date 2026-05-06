@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { httpsCallable, getFunctions } from "firebase/functions";
 import { useAuth } from "@/lib/auth-context";
+import { getFirebaseApp } from "@/lib/firebase";
 import {
   createWorkflowsBatch,
   deleteWorkflow,
@@ -33,10 +35,45 @@ export default function WorkflowsPage() {
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "ok" | "err";
     text: string;
   } | null>(null);
+
+  async function onPauseAllSchedules() {
+    if (
+      !confirm(
+        "Pause every active scheduled workflow? You can re-activate them individually after.",
+      )
+    )
+      return;
+    setPausing(true);
+    setNotice(null);
+    try {
+      const fns = getFunctions(getFirebaseApp(), "us-central1");
+      const callable = httpsCallable(fns, "pauseAllScheduled");
+      const res = await callable({});
+      const data = (res.data ?? {}) as {
+        paused?: { id: string; name: string; cron: string | null }[];
+      };
+      const count = data.paused?.length ?? 0;
+      const names = (data.paused ?? [])
+        .map((p) => `"${p.name}" (${p.cron || "no cron"})`)
+        .join(", ");
+      setNotice({
+        kind: "ok",
+        text: count
+          ? `Paused ${count}: ${names}`
+          : "No active scheduled workflows to pause.",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "pause failed";
+      setNotice({ kind: "err", text: msg });
+    } finally {
+      setPausing(false);
+    }
+  }
 
   const visible = useMemo(
     () =>
@@ -141,6 +178,15 @@ export default function WorkflowsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onPauseAllSchedules}
+            disabled={pausing}
+            className="rounded-md border border-amber-300 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900 dark:text-amber-400 dark:hover:bg-amber-950/30"
+            title="Pause every active scheduled workflow at once"
+          >
+            {pausing ? "pausing..." : "Pause all schedules"}
+          </button>
           <button
             type="button"
             onClick={onLoadSamples}

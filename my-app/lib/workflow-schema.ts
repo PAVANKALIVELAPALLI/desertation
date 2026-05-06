@@ -175,7 +175,7 @@ export function defaultStepConfig(type: StepType, name: string): StepConfig {
         emailSubject: name,
       };
     case "update_record":
-      return { collection: "workflowRecords", field: "note", value: name };
+      return { collection: "records", field: "note", value: name };
     case "condition":
       return { conditionField: "ok", conditionOp: "==", conditionValue: "true" };
     case "delay":

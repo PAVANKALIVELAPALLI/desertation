@@ -28,8 +28,14 @@ function getMailer(): nodemailer.Transporter | null {
   return _mailer;
 }
 
-async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
-  const message = step.config.message || "no message set";
+async function runSendNotification(
+  step: WorkflowStep,
+  context: Record<string, unknown>
+): Promise<StepResult> {
+  const message = resolveTemplate(
+    step.config.message || "no message set",
+    context
+  );
   const channel =
     step.config.notificationChannel || (step.config.emailTo ? "email" : "app");
 
@@ -41,8 +47,11 @@ async function runSendNotification(step: WorkflowStep): Promise<StepResult> {
         error: "email recipient is required",
       };
     }
-    const subject = step.config.emailSubject || step.name;
-    const to = step.config.emailTo;
+    const subject = resolveTemplate(
+      step.config.emailSubject || step.name,
+      context
+    );
+    const to = resolveTemplate(step.config.emailTo, context);
     const mailer = getMailer();
     const fromAddress =
       process.env.GMAIL_USER || "noreply@desertation-ccace.web.app";
@@ -145,8 +154,14 @@ async function runUpdateRecord(step: WorkflowStep): Promise<StepResult> {
   };
 }
 
-async function runLogEvent(step: WorkflowStep): Promise<StepResult> {
-  const message = step.config.message || "event logged";
+async function runLogEvent(
+  step: WorkflowStep,
+  context: Record<string, unknown>
+): Promise<StepResult> {
+  const message = resolveTemplate(
+    step.config.message || "event logged",
+    context
+  );
   console.log(`[log_event] ${message}`);
   return {
     success: true,
@@ -232,10 +247,17 @@ async function runHttpRequest(step: WorkflowStep): Promise<StepResult> {
       signal: controller.signal,
     });
     const text = await res.text();
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
     const out: Record<string, unknown> = {
       status: res.status,
       ok: res.ok,
-      body: text.slice(0, 2048),
+      body: parsed ?? text.slice(0, 2048),
+      bodyText: text.slice(0, 2048),
     };
     return {
       success: res.ok,
@@ -250,17 +272,42 @@ async function runHttpRequest(step: WorkflowStep): Promise<StepResult> {
   }
 }
 
+function resolveTemplate(
+  template: string | undefined,
+  context: Record<string, unknown>
+): string {
+  if (!template) return "";
+  return template.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (match, path: string) => {
+    const segments = path.split(".");
+    let value: unknown = context;
+    for (const seg of segments) {
+      if (value == null || typeof value !== "object") return match;
+      value = (value as Record<string, unknown>)[seg];
+    }
+    if (value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  });
+}
+
 export async function executeStep(
   step: WorkflowStep,
   context: Record<string, unknown>
 ): Promise<StepResult> {
   switch (step.type) {
     case "send_notification":
-      return runSendNotification(step);
+      return runSendNotification(step, context);
     case "update_record":
       return runUpdateRecord(step);
     case "log_event":
-      return runLogEvent(step);
+      return runLogEvent(step, context);
     case "condition":
       return runCondition(step, context);
     case "delay":

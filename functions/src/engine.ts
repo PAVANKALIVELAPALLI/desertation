@@ -79,9 +79,16 @@ export async function runWorkflow(
 
   let idx = 0;
   const seen = new Set<string>();
+  const skippedByBranch = new Set<string>();
 
   while (idx < ordered.length) {
     const step = ordered[idx];
+
+    if (skippedByBranch.has(step.id)) {
+      // condition routed away from this step — silently skip
+      idx++;
+      continue;
+    }
 
     if (seen.has(step.id)) {
       await writeLog({
@@ -144,6 +151,17 @@ export async function runWorkflow(
 
     Object.assign(context, result.output);
     await executionRef.update({ stepsCompleted: completed });
+
+    // For condition steps, mark the not-taken branch target so it gets
+    // skipped when the engine reaches it later in linear traversal.
+    if (step.type === "condition") {
+      const onTrue = step.config.onTrueStepId;
+      const onFalse = step.config.onFalseStepId;
+      if (onTrue && onTrue !== result.nextStepId)
+        skippedByBranch.add(onTrue);
+      if (onFalse && onFalse !== result.nextStepId)
+        skippedByBranch.add(onFalse);
+    }
 
     if (result.nextStepId) {
       const nextIdx = ordered.findIndex((s) => s.id === result.nextStepId);
