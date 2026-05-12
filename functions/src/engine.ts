@@ -85,7 +85,6 @@ export async function runWorkflow(
     const step = ordered[idx];
 
     if (skippedByBranch.has(step.id)) {
-      // condition routed away from this step — silently skip
       idx++;
       continue;
     }
@@ -152,8 +151,6 @@ export async function runWorkflow(
     Object.assign(context, result.output);
     await executionRef.update({ stepsCompleted: completed });
 
-    // For condition steps, mark the not-taken branch target so it gets
-    // skipped when the engine reaches it later in linear traversal.
     if (step.type === "condition") {
       const onTrue = step.config.onTrueStepId;
       const onFalse = step.config.onFalseStepId;

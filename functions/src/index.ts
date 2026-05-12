@@ -37,6 +37,22 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function bodyToHtml(body: string): string {
+  const normalized = body.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const paragraphs = normalized.split(/\n{2,}/);
+  const blocks = paragraphs.map((para) => {
+    const lines = para.split("\n").map((line) => {
+      const escaped = escapeHtml(line);
+      return escaped.replace(/ {2,}/g, (run) =>
+        "&nbsp;".repeat(run.length - 1) + " "
+      );
+    });
+    return `<p style="margin:0 0 12px 0;">${lines.join("<br>")}</p>`;
+  });
+  const inner = blocks.join("\n");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111;white-space:normal;">${inner}</div>`;
+}
+
 export const sendEmail = onCall(
   {
     region: "us-central1",
@@ -78,7 +94,7 @@ export const sendEmail = onCall(
         to,
         subject,
         text: body,
-        html: `<p>${escapeHtml(body)}</p>`,
+        html: bodyToHtml(body),
       });
       return {
         ok: true,
@@ -133,9 +149,6 @@ export const executeWorkflow = onCall(
   return { ok: true };
 });
 
-// Workflow `update_record` step: writes a field/value pair into the user-named
-// collection. Server-side because Firestore rules block writes from the client
-// to arbitrary collection names. Auth-gated, rejects system collections.
 const SYSTEM_COLLECTIONS = new Set([
   "workflows",
   "executions",
@@ -202,9 +215,6 @@ export const writeRecord = onCall(
   }
 );
 
-// One-shot: pauses all the caller's active scheduled workflows.
-// Optionally keep specific workflow IDs active via `keepIds` param.
-// Returns { paused: [{id, name, cron}], kept: [{id, name}] }.
 export const pauseAllScheduled = onCall(
   {
     region: "us-central1",
@@ -279,7 +289,12 @@ export const scheduledRunner = onSchedule(
     const workflow = { id: doc.id, ...doc.data() } as Workflow;
     const cron = workflow.trigger.config.cron;
     if (!cron) continue;
-    if (!shouldRunNow(cron, now)) continue;
+
+    const previousFire = previousCronFire(cron, now, LOOKBACK_MINUTES);
+    if (!previousFire) continue;
+
+    const lastRunAt = workflow.lastRunAt ?? 0;
+    if (previousFire.getTime() <= lastRunAt) continue;
 
     tasks.push(
       runWorkflow(workflow, "schedule").catch((err) => {
@@ -292,25 +307,35 @@ export const scheduledRunner = onSchedule(
   }
 );
 
-function shouldRunNow(cron: string, now: Date): boolean {
+const LOOKBACK_MINUTES = 60;
+
+export function previousCronFire(
+  cron: string,
+  now: Date,
+  maxLookbackMinutes: number
+): Date | null {
   const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) return false;
+  if (parts.length !== 5) return null;
 
+  const probe = new Date(now);
+  probe.setSeconds(0, 0);
+
+  for (let i = 0; i <= maxLookbackMinutes; i++) {
+    if (matchesCronInstant(parts, probe)) return new Date(probe);
+    probe.setMinutes(probe.getMinutes() - 1);
+  }
+  return null;
+}
+
+function matchesCronInstant(parts: string[], when: Date): boolean {
   const [minStr, hourStr, dayStr, monthStr, dowStr] = parts;
-
-  const minute = now.getMinutes();
-  const hour = now.getHours();
-  const day = now.getDate();
-  const month = now.getMonth() + 1;
-  const dow = now.getDay();
-
-  if (!matchField(minStr, minute, 0, 59)) return false;
-  if (!matchField(hourStr, hour, 0, 23)) return false;
-  if (!matchField(dayStr, day, 1, 31)) return false;
-  if (!matchField(monthStr, month, 1, 12)) return false;
-  if (!matchField(dowStr, dow, 0, 6)) return false;
-
-  return true;
+  return (
+    matchField(minStr, when.getUTCMinutes(), 0, 59) &&
+    matchField(hourStr, when.getUTCHours(), 0, 23) &&
+    matchField(dayStr, when.getUTCDate(), 1, 31) &&
+    matchField(monthStr, when.getUTCMonth() + 1, 1, 12) &&
+    matchField(dowStr, when.getUTCDay(), 0, 6)
+  );
 }
 
 function matchField(field: string, value: number, lo: number, hi: number): boolean {
@@ -342,9 +367,6 @@ function matchField(field: string, value: number, lo: number, hi: number): boole
   return parseInt(field, 10) === value;
 }
 
-// Debug endpoint: lists every active scheduled workflow.
-// Open in a browser to see id, name, cron, and email step config.
-// Optional ?action=pauseAll&secret=XXX disables all of them.
 export const debugSchedules = onRequest(
   {
     region: "us-central1",
@@ -402,11 +424,6 @@ export const debugSchedules = onRequest(
   }
 );
 
-// Fires every workflow with trigger.type=form_submit and matching formId
-// whenever a doc lands in /formSubmissions.
-// The submission doc must include { formId, userId, ...payload }.
-// Payload fields become available in step context so condition steps can
-// branch on them.
 export const onFormSubmission = onDocumentCreated(
   {
     region: "us-central1",

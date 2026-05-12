@@ -360,7 +360,9 @@ function CronHint({ value }: { value: string }) {
   if (!value) {
     return (
       <p className="mt-1 text-xs text-zinc-500">
-        e.g. <code>*/5 * * * *</code> runs every 5 minutes.
+        e.g. <code>*/5 * * * *</code> runs every 5 minutes,{" "}
+        <code>0 9 * * 1</code> runs every Monday at 09:00 UTC. Times are
+        evaluated in UTC.
       </p>
     );
   }
@@ -374,7 +376,9 @@ function CronHint({ value }: { value: string }) {
           : "text-red-600 dark:text-red-400")
       }
     >
-      {ok ? "✓ valid cron" : "✗ not a valid 5-field cron expression"}
+      {ok
+        ? "✓ valid cron — evaluated in UTC"
+        : "✗ not a valid 5-field cron expression"}
     </p>
   );
 }

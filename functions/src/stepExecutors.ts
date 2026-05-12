@@ -82,7 +82,7 @@ async function runSendNotification(
         to,
         subject,
         text: message,
-        html: `<p>${escapeHtml(message)}</p>`,
+        html: bodyToHtml(message),
       });
       console.log(`[notification:email] sent ${info.messageId} to ${to}`);
       return {
@@ -128,6 +128,22 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function bodyToHtml(body: string): string {
+  const normalized = body.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const paragraphs = normalized.split(/\n{2,}/);
+  const blocks = paragraphs.map((para) => {
+    const lines = para.split("\n").map((line) => {
+      const escaped = escapeHtml(line);
+      return escaped.replace(/ {2,}/g, (run) =>
+        "&nbsp;".repeat(run.length - 1) + " "
+      );
+    });
+    return `<p style="margin:0 0 12px 0;">${lines.join("<br>")}</p>`;
+  });
+  const inner = blocks.join("\n");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111;white-space:normal;">${inner}</div>`;
 }
 
 async function runUpdateRecord(step: WorkflowStep): Promise<StepResult> {

@@ -1,24 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
+
+function subscribeToLocation(notify: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("popstate", notify);
+  return () => {
+    window.removeEventListener("popstate", notify);
+  };
+}
+
+function getLocationPath(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.pathname;
+}
 
 export function useUrlId(prefix: string): string | undefined {
   const pathname = usePathname();
-  const [id, setId] = useState<string | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    return extractId(window.location.pathname, prefix);
-  });
-
-  useEffect(() => {
-    const fromPath = extractId(pathname || "", prefix);
-    const fromLocation =
-      typeof window !== "undefined"
-        ? extractId(window.location.pathname, prefix)
-        : undefined;
-    setId(fromLocation || fromPath);
-  }, [pathname, prefix]);
-
+  const locationPath = useSyncExternalStore(
+    subscribeToLocation,
+    getLocationPath,
+    () => "",
+  );
+  const fromLocation = extractId(locationPath, prefix);
+  const fromPath = extractId(pathname || "", prefix);
+  const id = fromLocation || fromPath;
   return id && id !== "_" ? id : undefined;
 }
 
