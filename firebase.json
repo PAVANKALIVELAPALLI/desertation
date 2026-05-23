@@ -16,6 +16,7 @@
     "trailingSlash": true,
     "cleanUrls": true,
     "rewrites": [
+      { "source": "/__api/executeWorkflow", "function": { "functionId": "executeWorkflow", "region": "us-central1" } },
       { "source": "/dashboard/workflows/**", "destination": "/dashboard/workflows/_/index.html" },
       { "source": "/dashboard/executions/**", "destination": "/dashboard/executions/_/index.html" }
     ]

@@ -28,14 +28,48 @@ function getMailer(): nodemailer.Transporter | null {
   return _mailer;
 }
 
+async function fetchBodyUrl(url: string): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "user-agent": "WorkflowApp/1.0 (+https://desertation-ccace.web.app)",
+        accept: "text/plain, application/json;q=0.9, */*;q=0.5",
+      },
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return text.slice(0, 4096);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runSendNotification(
   step: WorkflowStep,
   context: Record<string, unknown>
 ): Promise<StepResult> {
-  const message = resolveTemplate(
-    step.config.message || "no message set",
+  let message = resolveTemplate(
+    step.config.message || "",
     context
   );
+  if (step.config.bodyUrl) {
+    const fetchedUrl = resolveTemplate(step.config.bodyUrl, context);
+    try {
+      const fetched = await fetchBodyUrl(fetchedUrl);
+      message = message ? `${message}\n\n${fetched}` : fetched;
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        output: { bodyUrl: fetchedUrl, status: "fetch_failed" },
+        error: `bodyUrl fetch failed: ${errMsg}`,
+      };
+    }
+  }
+  if (!message) message = "no message set";
   const channel =
     step.config.notificationChannel || (step.config.emailTo ? "email" : "app");
 
@@ -255,10 +289,16 @@ async function runHttpRequest(step: WorkflowStep): Promise<StepResult> {
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
   try {
+    const headers: Record<string, string> = {
+      "user-agent": "WorkflowApp/1.0 (+https://desertation-ccace.web.app)",
+      accept: "text/plain, application/json;q=0.9, */*;q=0.5",
+    };
+    if (method === "POST") {
+      headers["content-type"] = "application/json";
+    }
     const res = await fetch(url, {
       method: method || "GET",
-      headers:
-        method === "POST" ? { "content-type": "application/json" } : undefined,
+      headers,
       body: method === "POST" ? body || "{}" : undefined,
       signal: controller.signal,
     });

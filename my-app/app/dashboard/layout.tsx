@@ -10,6 +10,7 @@ const NAV = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/workflows", label: "Workflows" },
   { href: "/dashboard/executions", label: "Executions" },
+  { href: "/dashboard/forms", label: "Forms" },
   { href: "/dashboard/analytics", label: "Analytics" },
 ];
 

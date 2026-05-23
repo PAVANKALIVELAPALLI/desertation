@@ -13,6 +13,28 @@ function fmt(ts: number | null) {
   return new Date(ts).toLocaleString();
 }
 
+function looksLikeTimestamp(key: string, value: unknown): value is number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return false;
+  if (value < 1e12 || value > 1e14) return false;
+  const k = key.toLowerCase();
+  return k.endsWith("at") || k === "timestamp" || k === "time";
+}
+
+function humaniseTimestamps(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(humaniseTimestamps);
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = looksLikeTimestamp(k, v)
+        ? `${new Date(v).toLocaleString()} (${v})`
+        : humaniseTimestamps(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 function duration(e: Execution): string {
   if (!e.completedAt) return "still running";
   const ms = e.completedAt - e.startedAt;
@@ -252,7 +274,7 @@ function Pre({
         {label}
       </div>
       <pre className="mt-1 overflow-auto rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-        {data ? JSON.stringify(data, null, 2) : "-"}
+        {data ? JSON.stringify(humaniseTimestamps(data), null, 2) : "-"}
       </pre>
     </div>
   );

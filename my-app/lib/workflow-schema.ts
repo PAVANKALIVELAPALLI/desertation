@@ -95,7 +95,10 @@ function validateStep(
   const c = step.config || {};
   switch (step.type) {
     case "send_notification":
-      if (!c.message) errors.push(`${prefix}: message is required`);
+      if (!c.message && !c.bodyUrl)
+        errors.push(`${prefix}: message or bodyUrl is required`);
+      if (c.bodyUrl && !/^https?:\/\//.test(c.bodyUrl))
+        errors.push(`${prefix}: bodyUrl must start with http:// or https://`);
       if (c.notificationChannel === "email") {
         if (!c.emailTo) errors.push(`${prefix}: emailTo is required`);
         else if (!isEmail(c.emailTo))

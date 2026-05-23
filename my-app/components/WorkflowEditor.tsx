@@ -575,6 +575,20 @@ function StepConfigFields({
               className={textInput}
             />
           </Field>
+          {channel === "email" ? (
+            <Field label="Or fetch body from URL (server-side)">
+              <input
+                value={c.bodyUrl || ""}
+                onChange={(e) => onChangeConfig({ bodyUrl: e.target.value })}
+                className={textInput}
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Optional. If set, the server fetches this URL and uses the
+                response as the email body. Useful for endpoints that block
+                browsers (like wttr.in).
+              </p>
+            </Field>
+          ) : null}
         </div>
       );
     }

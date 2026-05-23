@@ -23,6 +23,7 @@ export type ConditionOp = "==" | "!=" | ">" | "<" | ">=" | "<=";
 export interface StepConfig {
   notificationChannel?: "app" | "email";
   message?: string;
+  bodyUrl?: string;
   emailTo?: string;
   emailSubject?: string;
   collection?: string;

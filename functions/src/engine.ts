@@ -56,6 +56,7 @@ async function runStepWithRetries(
 export async function runWorkflow(
   workflow: Workflow,
   triggeredBy: TriggerType,
+  initialContext: Record<string, unknown> = {},
 ): Promise<void> {
   const ordered = orderedSteps(workflow);
 
@@ -73,7 +74,7 @@ export async function runWorkflow(
   });
 
   const executionId = executionRef.id;
-  const context: Record<string, unknown> = {};
+  const context: Record<string, unknown> = { ...initialContext };
   let completed = 0;
   let firstError: string | null = null;
 
@@ -81,7 +82,8 @@ export async function runWorkflow(
   const seen = new Set<string>();
   const skippedByBranch = new Set<string>();
 
-  while (idx < ordered.length) {
+  try {
+    while (idx < ordered.length) {
     const step = ordered[idx];
 
     if (skippedByBranch.has(step.id)) {
@@ -191,6 +193,21 @@ export async function runWorkflow(
     stepsCompleted: completed,
   });
   await bumpWorkflowRun(workflow.id!);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    try {
+      await executionRef.update({
+        status: "failed",
+        completedAt: Date.now(),
+        error: `engine error: ${msg}`,
+        stepsCompleted: completed,
+      });
+      await bumpWorkflowRun(workflow.id!);
+    } catch {
+      // swallow secondary write failure
+    }
+    console.error(`[runWorkflow] engine crashed for ${workflow.id}:`, msg);
+  }
 }
 
 async function bumpWorkflowRun(workflowId: string) {

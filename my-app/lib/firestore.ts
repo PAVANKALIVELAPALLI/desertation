@@ -335,8 +335,11 @@ async function runStepOnce(
   const config = step.config;
 
   if (step.type === "send_notification") {
-    const rawMessage = config.message || "no message set";
+    const rawMessage = config.message || (config.bodyUrl ? "" : "no message set");
     const message = resolveTemplate(rawMessage, context);
+    const bodyUrl = config.bodyUrl
+      ? resolveTemplate(config.bodyUrl, context)
+      : undefined;
     const channel = config.notificationChannel || (config.emailTo ? "email" : "app");
 
     if (channel === "email") {
@@ -357,7 +360,7 @@ async function runStepOnce(
         const { getFirebaseApp } = await import("./firebase");
         const fns = getFunctions(getFirebaseApp(), "us-central1");
         const callable = httpsCallable(fns, "sendEmail");
-        const res = await callable({ to, subject, body: message });
+        const res = await callable({ to, subject, body: message, bodyUrl });
         const data = (res.data ?? {}) as {
           ok?: boolean;
           messageId?: string;
@@ -496,12 +499,15 @@ async function runStepOnce(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
+      const headers: Record<string, string> = {
+        accept: "text/plain, application/json;q=0.9, */*;q=0.5",
+      };
+      if (config.method === "POST") {
+        headers["content-type"] = "application/json";
+      }
       const res = await fetch(config.url, {
         method: config.method || "GET",
-        headers:
-          config.method === "POST"
-            ? { "content-type": "application/json" }
-            : undefined,
+        headers,
         body: config.method === "POST" ? config.body || "{}" : undefined,
         signal: controller.signal,
       });

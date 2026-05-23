@@ -9,6 +9,7 @@ import { runWorkflow } from "./engine";
 
 admin.initializeApp();
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true });
 
 const gmailUser = defineSecret("GMAIL_USER");
 const gmailAppPassword = defineSecret("GMAIL_APP_PASSWORD");
@@ -72,12 +73,40 @@ export const sendEmail = onCall(
       to?: string;
       subject?: string;
       body?: string;
+      bodyUrl?: string;
     };
     const to = (data.to || "").trim();
     const subject = (data.subject || "Workflow notification").trim();
-    const body = data.body || "";
+    let body = data.body || "";
+    const bodyUrl = (data.bodyUrl || "").trim();
     if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       throw new HttpsError("invalid-argument", "valid 'to' email is required");
+    }
+    if (bodyUrl) {
+      if (!/^https?:\/\//.test(bodyUrl)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "bodyUrl must start with http:// or https://"
+        );
+      }
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10_000);
+        const res = await fetch(bodyUrl, {
+          method: "GET",
+          headers: {
+            "user-agent": "WorkflowApp/1.0 (+https://desertation-ccace.web.app)",
+            accept: "text/plain, application/json;q=0.9, */*;q=0.5",
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const text = await res.text();
+        body = text.slice(0, 4096);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new HttpsError("internal", `bodyUrl fetch failed: ${msg}`);
+      }
     }
     const mailer = getMailer();
     if (!mailer) {
@@ -458,6 +487,17 @@ export const onFormSubmission = onDocumentCreated(
       return;
     }
 
+    const RESERVED = new Set(["formId", "userId", "submittedAt"]);
+    const payload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(submission)) {
+      if (!RESERVED.has(k)) payload[k] = v;
+    }
+    const initialContext: Record<string, unknown> = {
+      ...payload,
+      formId,
+      submissionId: event.params.submissionId,
+    };
+
     const tasks: Promise<void>[] = [];
     for (const doc of snap.docs) {
       const wf = { id: doc.id, ...doc.data() } as Workflow;
@@ -465,7 +505,7 @@ export const onFormSubmission = onDocumentCreated(
         `[onFormSubmission] firing workflow ${wf.id} for submission ${event.params.submissionId}`
       );
       tasks.push(
-        runWorkflow(wf, "form_submit").catch((err) => {
+        runWorkflow(wf, "form_submit", initialContext).catch((err) => {
           console.error(`[onFormSubmission] failed for ${wf.id}:`, err);
         })
       );
