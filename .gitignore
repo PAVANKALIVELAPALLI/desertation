@@ -2,3 +2,5 @@ node_modules/
 functions/lib/
 .DS_Store
 .gstack/
+
+.firebase/
