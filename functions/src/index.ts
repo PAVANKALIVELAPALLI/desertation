@@ -396,62 +396,6 @@ function matchField(field: string, value: number, lo: number, hi: number): boole
   return parseInt(field, 10) === value;
 }
 
-export const debugSchedules = onRequest(
-  {
-    region: "us-central1",
-    cors: true,
-  },
-  async (req, res) => {
-    const snap = await db
-      .collection("workflows")
-      .where("status", "==", "active")
-      .where("trigger.type", "==", "schedule")
-      .get();
-
-    const rows = snap.docs.map((d) => {
-      const data = d.data() as Workflow;
-      const steps = (data.steps || []).map((s: WorkflowStep) => ({
-        name: s.name,
-        type: s.type,
-        emailTo: s.config?.emailTo,
-        emailSubject: s.config?.emailSubject,
-        message: s.config?.message,
-        cron: data.trigger?.config?.cron,
-      }));
-      return {
-        id: d.id,
-        name: data.name,
-        userId: data.userId,
-        cron: data.trigger?.config?.cron,
-        steps,
-      };
-    });
-
-    if (req.query.action === "pauseAll" && req.query.secret === "knockknock") {
-      const batch = db.batch();
-      snap.docs.forEach((d) =>
-        batch.update(d.ref, { status: "inactive", updatedAt: Date.now() })
-      );
-      if (snap.size > 0) await batch.commit();
-      res.json({ pausedCount: snap.size, paused: rows });
-      return;
-    }
-
-    if (req.query.action === "pauseId" && typeof req.query.id === "string") {
-      const id = req.query.id;
-      const target = snap.docs.find((d) => d.id === id);
-      if (!target) {
-        res.status(404).json({ error: `workflow ${id} not active+scheduled` });
-        return;
-      }
-      await target.ref.update({ status: "inactive", updatedAt: Date.now() });
-      res.json({ paused: id });
-      return;
-    }
-
-    res.json({ count: snap.size, workflows: rows });
-  }
-);
 
 export const onFormSubmission = onDocumentCreated(
   {
