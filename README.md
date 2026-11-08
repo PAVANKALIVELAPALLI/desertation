@@ -46,3 +46,10 @@ Relay lets non-programmers automate tasks by connecting a trigger (what starts a
 
 ## Author
 Pavan Kalivelapalli, MSc Computing, Griffith College Dublin
+## Screenshots
+![Landing page](docs/screenshots/01-landing.png)
+![Overview dashboard](docs/screenshots/02-overview.png)
+![Workflows](docs/screenshots/03-workflows.png)
+![Executions](docs/screenshots/04-executions.png)
+![Step-by-step execution log](docs/screenshots/05-execution-logs.png)
+![Workflow builder](docs/screenshots/06-workflow-builder.png)
