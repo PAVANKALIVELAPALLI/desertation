@@ -4,6 +4,8 @@ Relay lets non-programmers automate tasks by connecting a trigger (what starts a
 
 **Live demo:** https://desertation-ccace.web.app
 
+**Demo video (4 min):** https://youtu.be/ulWKxrYhblM
+
 ## Features
 - Triggers: manual run, scheduled (cron-based), and form submission
 - Steps: email notifications, HTTP requests, conditions, delays, logging and record updates
@@ -33,7 +35,7 @@ Relay lets non-programmers automate tasks by connecting a trigger (what starts a
         npm install
         npm run build
 
-3. To deploy your own copy, create a Firebase project, update .firebaserc and the web config in my-app/lib/firebase.ts, set the GMAIL_USER and GMAIL_PASS secrets, then run: firebase deploy
+3. To deploy your own copy, create a Firebase project, update .firebaserc and the web config in my-app/lib/firebase.ts, set the GMAIL_USER and GMAIL_APP_PASSWORD secrets, then run: firebase deploy
 
 ## Security
 - Firestore rules restrict each user to their own workflows and runs
